@@ -164,7 +164,9 @@ export default command => {
 		plugins: [
 			...nodePlugins,
 			addSheBang(),
-			!command.configTest && license({ thirdParty: generateLicenseFile })
+			!command.configTest &&
+				Number(process.version.slice(1).split('.')[0]) >= 8 &&
+				license({ thirdParty: generateLicenseFile })
 		],
 		// acorn needs to be external as some plugins rely on a shared acorn instance
 		external: ['acorn', 'assert', 'events', 'fs', 'module', 'path', 'util'],
