@@ -393,11 +393,9 @@ export function createPluginDriver(
 		getFileName: fileEmitter.getFileName,
 
 		// chains, ignores returns
-		hookSeq(name, args, hookContext) {
-			let promise: Promise<void> = Promise.resolve() as any;
+		async hookSeq(name, args, hookContext) {
 			for (let i = 0; i < plugins.length; i++)
-				promise = promise.then(() => runHook<void>(name, args as any[], i, false, hookContext));
-			return promise;
+				await runHook<void>(name, args as any[], i, false, hookContext);
 		},
 
 		// chains, ignores returns
@@ -407,16 +405,12 @@ export function createPluginDriver(
 		},
 
 		// chains, first non-null result stops and returns
-		hookFirst(name, args, hookContext, skip) {
-			let promise: Promise<any> = Promise.resolve();
+		async hookFirst(name, args, hookContext, skip) {
 			for (let i = 0; i < plugins.length; i++) {
 				if (skip === i) continue;
-				promise = promise.then((result: any) => {
-					if (result != null) return result;
-					return runHook(name, args as any[], i, false, hookContext);
-				});
+				const result: any = await runHook(name, args as any[], i, false, hookContext);
+				if (result != null) return result;
 			}
-			return promise;
 		},
 
 		// chains synchronously, first non-null result stops and returns
@@ -433,8 +427,8 @@ export function createPluginDriver(
 			const promises: Promise<void>[] = [];
 			for (let i = 0; i < plugins.length; i++) {
 				const hookPromise = runHook<void>(name, args as any[], i, false, hookContext);
-				if (!hookPromise) continue;
-				promises.push(hookPromise);
+				if (hookPromise)
+					promises.push(hookPromise);
 			}
 			return (async () => {
 				await Promise.all(promises);
@@ -442,18 +436,14 @@ export function createPluginDriver(
 		},
 
 		// chains, reduces returns of type R, to type T, handling the reduced value as the first hook argument
-		hookReduceArg0(name, [arg0, ...args], reduce, hookContext) {
-			let promise = Promise.resolve(arg0);
+		async hookReduceArg0(name, [arg0, ...args], reduce, hookContext) {
+			arg0 = await arg0;
 			for (let i = 0; i < plugins.length; i++) {
-				promise = promise.then(arg0 => {
-					const hookPromise = runHook(name, [arg0, ...args], i, false, hookContext);
-					if (!hookPromise) return arg0;
-					return hookPromise.then((result: any) =>
-						reduce.call(pluginContexts[i], arg0, result, plugins[i])
-					);
-				});
+				const hookPromise: any = runHook(name, [arg0, ...args], i, false, hookContext);
+				if (hookPromise)
+					arg0 = await reduce.call(pluginContexts[i], arg0, await hookPromise, plugins[i]);
 			}
-			return promise;
+			return arg0;
 		},
 
 		// chains synchronously, reduces returns of type R, to type T, handling the reduced value as the first hook argument
@@ -466,18 +456,14 @@ export function createPluginDriver(
 		},
 
 		// chains, reduces returns of type R, to type T, handling the reduced value separately. permits hooks as values.
-		hookReduceValue(name, initial, args, reduce, hookContext) {
-			let promise = Promise.resolve(initial);
+		async hookReduceValue(name, initial, args, reduce, hookContext) {
+			let value = await initial;
 			for (let i = 0; i < plugins.length; i++) {
-				promise = promise.then(value => {
-					const hookPromise = runHook(name, args, i, true, hookContext);
-					if (!hookPromise) return value;
-					return hookPromise.then((result: any) =>
-						reduce.call(pluginContexts[i], value, result, plugins[i])
-					);
-				});
+				const hookPromise: any = runHook(name, args, i, true, hookContext);
+				if (hookPromise)
+					value = await reduce.call(pluginContexts[i], value, await hookPromise, plugins[i]);
 			}
-			return promise;
+			return value;
 		},
 
 		// chains, reduces returns of type R, to type T, handling the reduced value separately. permits hooks as values.
